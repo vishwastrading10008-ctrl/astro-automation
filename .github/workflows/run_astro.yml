@@ -1,83 +1,33 @@
-import swisseph as swe
-import pandas as pd
-from datetime import datetime, timedelta
+name: Run Astro Automation
 
-swe.set_ephe_path(".")
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
 
-PLANETS = {
-    "सूर्य": swe.SUN,
-    "मंगल": swe.MARS,
-    "बुध": swe.MERCURY,
-    "गुरु": swe.JUPITER,
-    "शुक्र": swe.VENUS,
-    "शनि": swe.SATURN,
-    "राहु": swe.MEAN_NODE
-}
+jobs:
+  run:
+    runs-on: ubuntu-latest
 
-def navamsha(deg):
-    return int((deg % 30) / 3.333333) + 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-start_time = datetime.utcnow()
-end_time = start_time + timedelta(days=30)
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-current = start_time
+      - name: Install dependencies
+        run: |
+          pip install pyswisseph pandas numpy
 
-active = {}
-results = []
+      - name: Run astrology engine
+        run: |
+          python astro_engine.py
 
-while current <= end_time:
-    jd = swe.julday(
-        current.year,
-        current.month,
-        current.day,
-        current.hour + current.minute / 60
-    )
-
-    moon_deg = swe.calc(jd, swe.MOON)[0][0]
-    moon_nav = navamsha(moon_deg)
-
-    matches = []
-
-    for name, planet in PLANETS.items():
-        planet_deg = swe.calc(jd, planet)[0][0]
-        planet_nav = navamsha(planet_deg)
-
-        if planet_nav == moon_nav:
-            matches.append(name)
-
-    key = "-".join(matches)
-
-    if key and key not in active:
-        active[key] = current
-
-    ended = []
-
-    for k in list(active.keys()):
-        if k != key:
-            results.append([
-                f"चंद्र-{k}",
-                active[k].strftime("%Y-%m-%d %H:%M"),
-                current.strftime("%Y-%m-%d %H:%M")
-            ])
-            ended.append(k)
-
-    for k in ended:
-        del active[k]
-
-    current += timedelta(hours=1)
-
-for k, start in active.items():
-    results.append([
-        f"चंद्र-{k}",
-        start.strftime("%Y-%m-%d %H:%M"),
-        end_time.strftime("%Y-%m-%d %H:%M")
-    ])
-
-df = pd.DataFrame(
-    results,
-    columns=["संयोजन", "शुरू_समय", "समाप्त_समय"]
-)
-
-df.to_csv("conjunctions.csv", index=False)
-
-print("Generated conjunctions.csv successfully")
+      - name: Upload CSV output
+        uses: actions/upload-artifact@v4
+        with:
+          name: conjunctions
+          path: conjunctions.csv
